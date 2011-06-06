@@ -1,0 +1,180 @@
+--- LabeledLDA.c	2011-01-17 22:05:16.000000000 -0800
++++ LabeledLDA_stop.c	2011-02-03 15:09:06.000000000 -0800
+@@ -10,7 +10,7 @@
+ HBC is a freely available compiler for statistical models.  This generated
+ code can be built using the following command:
+ 
+-  gcc -O3 -lm labels.c stats.c samplib.c LabeledLDA.c -o LabeledLDA.out
++  gcc -O3 -lm labels.c stats.c samplib.c LabeledLDA_stop.c -o LabeledLDA_stop.out
+ 
+ The hierarchical model that this code reflects is:
+ 
+@@ -33,6 +33,8 @@
+ Generated using the command:
+ 
+   hbc compile LDA.hier LDA.c
++
++Manually modified to include flexible stop-word modeling, similar to (Grifiths, Steyvers, Blei and Tenenbaum 2005)
+ */
+ #include <stdio.h>
+ #include <stdlib.h>
+@@ -71,6 +73,34 @@
+   free(tmpSP4);
+ }
+ 
++void resample_post_gamma(int D, int** M, int* N, int V, double* post_gamma, int*** w, int*** s) {
++  int k_8;
++  double* tmpSP4;
++  int d_2;
++  int n_74;
++  int m_290;
++  int dvv_loop_var_1;
++  tmpSP4 = (double*) malloc(sizeof(double) * (1+((V) + (1))-(1)));
++  for (k_8=2; k_8<=2; k_8++) {
++    /* Implements direct sampling from the following distribution: */
++    /*   Delta(post_gamma_{k@8} | \sum_{d@2 \in [D]} \sum_{n@74 \in [N_{d@2}]} \sum_{m@290 \in [M_{d@2,n@74}]} .*(=(k@8, z_{d@2,n@74,m@290}), IDR(w_{d@2,n@74,m@290}, 1, V)), V) */
++    for (dvv_loop_var_1=1; dvv_loop_var_1<=V; dvv_loop_var_1++) {
++      tmpSP4[dvv_loop_var_1-1] = 0.0;
++    }
++    tmpSP4[(V) + (1)-1] = (0.0) * (((1) + (V)) - (1));
++    for (d_2=1; d_2<=D; d_2++) {
++      for (n_74=1; n_74<=N[d_2-1]; n_74++) {
++        for (m_290=1; m_290<=M[d_2-1][n_74-1]; m_290++) {
++          tmpSP4[(V) + (1)-1] += (1.0) * ((((k_8) == (s[d_2-1][n_74-1][m_290-1])) ? 1 : 0));
++          tmpSP4[w[d_2-1][n_74-1][m_290-1]-1] += (1.0) * ((((k_8) == (s[d_2-1][n_74-1][m_290-1])) ? 1 : 0));
++        }
++      }
++    }
++    sample_Delta(post_gamma, tmpSP4, V);
++  }
++  free(tmpSP4);
++}
++
+ void resample_post_theta(int D, int K, int** M, int* N, double** post_theta, int*** z) {
+   int d_9;
+   double* tmpSP7;
+@@ -128,7 +158,52 @@
+   return (eta);
+ }
+ 
+-void resample_z(int D, int** M, int* N, double alpha, double eta, double** post_beta, double** post_theta, int*** w, int*** z, int** labels, int K, int V) {
++void resample_s(int D, int** M, int* N, double alpha, double eta, double psi, double** post_beta, double** post_theta, double *post_gamma, int*** w, int*** z, int*** s, int** labels, int K, int V) {
++  int d_10;
++  int n_16;
++  int m_22;
++  double* post_s;
++  int tmp_idx_z_3;
++  int dvv_loop_var_1;
++  post_s = (double*) malloc(sizeof(double) * 3);
++  for (d_10=1; d_10<=D; d_10++) {
++    for (n_16=1; n_16<=N[d_10-1]; n_16++) {
++      for (m_22=1; m_22<=M[d_10-1][n_16-1]; m_22++) {
++        /* decrement counts */
++        if(s[d_10-1][n_16-1][m_22-1] == 1) {
++          post_theta[d_10-1][(K) + (1)-1]                                     -= 1.0;
++          post_theta[d_10-1][z[d_10-1][n_16-1][m_22-1]-1]                     -= 1.0;
++          post_beta[z[d_10-1][n_16-1][m_22-1]-1][(V) + (1)-1]                 -= 1.0;
++          post_beta[z[d_10-1][n_16-1][m_22-1]-1][w[d_10-1][n_16-1][m_22-1]-1] -= 1.0;
++        } else {
++          post_gamma[(V) + (1)-1]                 -= 1.0;
++          post_gamma[w[d_10-1][n_16-1][m_22-1]-1] -= 1.0;          
++        }
++          
++        post_s[0] = (ldf_Mult_smooth(0, eta, w[d_10-1][n_16-1][m_22-1], post_beta[z[d_10-1][n_16-1][m_22-1]-1], 1, V)) + (ldf_Mult_smooth(0, alpha, z[d_10-1][n_16-1][m_22-1], post_theta[d_10-1], 1, K));
++        post_s[1] = ldf_Mult_smooth(0, psi, w[d_10-1][n_16-1][m_22-1], post_gamma, 1, V);
++        normalizeLog(post_s, 1, 2);
++        
++        /* Sample */
++        s[d_10-1][n_16-1][m_22-1] = sample_Mult(post_s, 1, 2);
++
++        /* increment counts */
++        if(s[d_10-1][n_16-1][m_22-1] == 1) {
++          post_beta[z[d_10-1][n_16-1][m_22-1]-1][(V) + (1)-1]                 += 1.0;
++          post_beta[z[d_10-1][n_16-1][m_22-1]-1][w[d_10-1][n_16-1][m_22-1]-1] += 1.0;
++          post_theta[d_10-1][(K) + (1)-1]                                     += 1.0;
++          post_theta[d_10-1][z[d_10-1][n_16-1][m_22-1]-1]                     += 1.0;
++        } else {
++          post_gamma[(V) + (1)-1]                 += 1.0;
++          post_gamma[w[d_10-1][n_16-1][m_22-1]-1] += 1.0;
++        }
++      }
++    }
++  }
++  free(post_s);
++}
++
++void resample_z(int D, int** M, int* N, double alpha, double eta, double psi, double** post_beta, double** post_theta, double *post_gamma, int*** w, int*** z, int*** s, int** labels, int K, int V) {
+   int d_10;
+   int n_16;
+   int m_22;
+@@ -139,26 +214,22 @@
+   for (d_10=1; d_10<=D; d_10++) {
+     for (n_16=1; n_16<=N[d_10-1]; n_16++) {
+       for (m_22=1; m_22<=M[d_10-1][n_16-1]; m_22++) {
++        /* decrement counts */
++        if(s[d_10-1][n_16-1][m_22-1] == 1) {
++          post_beta[z[d_10-1][n_16-1][m_22-1]-1][(V) + (1)-1] += (0.0) - ((1.0) * ((((z[d_10-1][n_16-1][m_22-1]) == (z[d_10-1][n_16-1][m_22-1])) ? 1 : 0)));
++          post_beta[z[d_10-1][n_16-1][m_22-1]-1][w[d_10-1][n_16-1][m_22-1]-1] += (0.0) - ((1.0) * ((((z[d_10-1][n_16-1][m_22-1]) == (z[d_10-1][n_16-1][m_22-1])) ? 1 : 0)));
++        }
+         post_theta[d_10-1][(K) + (1)-1] += (0.0) - (1.0);
+         post_theta[d_10-1][z[d_10-1][n_16-1][m_22-1]-1] += (0.0) - (1.0);
+-        post_beta[z[d_10-1][n_16-1][m_22-1]-1][(V) + (1)-1] += (0.0) - ((1.0) * ((((z[d_10-1][n_16-1][m_22-1]) == (z[d_10-1][n_16-1][m_22-1])) ? 1 : 0)));
+-        post_beta[z[d_10-1][n_16-1][m_22-1]-1][w[d_10-1][n_16-1][m_22-1]-1] += (0.0) - ((1.0) * ((((z[d_10-1][n_16-1][m_22-1]) == (z[d_10-1][n_16-1][m_22-1])) ? 1 : 0)));
+-        /* Implements multinomial sampling from the following distribution: */
+-        /*   (Mult(w_{d@10,n@16,m@22} | .+(eta, sub(post_beta, z_{d@10,n@16,m@22}))))(Mult(z_{d@10,n@16,m@22} | .+(alpha, post_theta_{d@10}))) */
+-        /***************************************************************
+-        for (dvv_loop_var_1=1; dvv_loop_var_1<=K; dvv_loop_var_1++) {
+-          tmp_post_z_3[dvv_loop_var_1-1] = 0.0;
+-        }
+-        tmp_post_z_3[(K) + (1)-1] = (0.0) * (((1) + (K)) - (1));
+-        for (tmp_idx_z_3=1; tmp_idx_z_3<=K; tmp_idx_z_3++) {
+-          tmp_post_z_3[tmp_idx_z_3-1] = (ldf_Mult_smooth(0, eta, w[d_10-1][n_16-1][m_22-1], post_beta[tmp_idx_z_3-1], 1, V)) + (ldf_Mult_smooth(0, alpha, tmp_idx_z_3, post_theta[d_10-1], 1, K));
++        
++        /* Sample */
++        z[d_10-1][n_16-1][m_22-1] = sample_Mult_labeled_stop(w[d_10-1][n_16-1][m_22-1], s[d_10-1][n_16-1][m_22-1], post_beta, post_theta[d_10-1], V, K, alpha, eta, labels[d_10-1]);
++
++        /* increment counts */
++        if(s[d_10-1][n_16-1][m_22-1] == 1) {
++          post_beta[z[d_10-1][n_16-1][m_22-1]-1][(V) + (1)-1] += (1.0) * ((((z[d_10-1][n_16-1][m_22-1]) == (z[d_10-1][n_16-1][m_22-1])) ? 1 : 0));
++          post_beta[z[d_10-1][n_16-1][m_22-1]-1][w[d_10-1][n_16-1][m_22-1]-1] += (1.0) * ((((z[d_10-1][n_16-1][m_22-1]) == (z[d_10-1][n_16-1][m_22-1])) ? 1 : 0));
+         }
+-        normalizeLog(tmp_post_z_3, 1, K);
+-        z[d_10-1][n_16-1][m_22-1] = sample_Mult(tmp_post_z_3, 1, K);
+-        ***************************************************************/
+-        z[d_10-1][n_16-1][m_22-1] = sample_Mult_labeled(w[d_10-1][n_16-1][m_22-1], post_beta, post_theta[d_10-1], V, K, alpha, eta, labels[d_10-1]);
+-        post_beta[z[d_10-1][n_16-1][m_22-1]-1][(V) + (1)-1] += (1.0) * ((((z[d_10-1][n_16-1][m_22-1]) == (z[d_10-1][n_16-1][m_22-1])) ? 1 : 0));
+-        post_beta[z[d_10-1][n_16-1][m_22-1]-1][w[d_10-1][n_16-1][m_22-1]-1] += (1.0) * ((((z[d_10-1][n_16-1][m_22-1]) == (z[d_10-1][n_16-1][m_22-1])) ? 1 : 0));
+         post_theta[d_10-1][(K) + (1)-1] += 1.0;
+         post_theta[d_10-1][z[d_10-1][n_16-1][m_22-1]-1] += 1.0;
+       }
+@@ -458,9 +580,12 @@
+   int V;
+   double alpha;
+   double eta;
++  double psi;
+   double** post_beta;
+   double** post_theta;
++  double* post_gamma;
+   int*** w;
++  int*** s;     /* Stop words */
+   int*** z;
+   int*** best_z;
+   int** labels;
+@@ -540,13 +677,16 @@
+   fprintf(stderr, "Initializing variables...\n");
+   fflush(stderr);
+   initialize_z(z, D, M, N, K);
++  initialize_s(s, D, M, N);
+   initialize_post_beta(post_beta, D, K, M, N, V, w, z);
+   initialize_post_theta(post_theta, D, K, M, N, z);
++  initialize_post_gamma(post_gamma, D, M, N, V, w, s);
+ 
+   for (iter=1; iter<=nIter; iter++) {
+     fprintf(stderr, "iter %d", iter);
+     fflush(stderr);
+-    resample_z(D, M, N, alpha, eta, post_beta, post_theta, w, z, labels, K, V);
++    resample_z(D, M, N, alpha, eta, psi, post_beta, post_theta, post_gamma, w, z, s, labels, K, V);
++    resample_s(D, M, N, alpha, eta, psi, post_beta, post_theta, post_gamma, w, z, s, labels, K, V);
+ 
+     loglik = compute_log_posterior(D, K, M, N, V, alpha, post_beta, eta, post_theta, w, z);
+     fprintf(stderr, "\t%g", loglik);

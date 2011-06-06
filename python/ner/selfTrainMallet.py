@@ -1,0 +1,52 @@
+#!/usr/bin/python
+
+import sys
+
+sys.path.append('python/cap')
+sys.path.append('python')
+
+import Features
+
+fe  = Features.FeatureExtractor()
+cap = Features.CapClassifier()
+
+prevSid = None
+minConf = None
+prevWords = None
+prevPos   = None
+prevTags  = None
+for line in open(sys.argv[1]):
+    line = line.rstrip('\n')
+    fields = line.split('\t')
+
+    sid    = fields[0]
+    confidence = 1.0 / float(fields[-1])
+    eType  = fields[-2]
+    entity = fields[-3]
+    neTags = fields[-4].split(' ')
+    pos    = fields[-5].split(' ')
+    words  = fields[-6].split(' ')
+
+    if prevSid and prevSid != sid:
+        goodCap = cap.Classify(prevWords) > 0.5
+        quotes = Features.GetQuotes(prevWords)
+
+        for i in range(len(prevWords)):
+            features = fe.Extract(prevWords, prevPos, i, goodCap) + ['DOMAIN=Twitter']
+            if quotes[i]:
+                features.append("QUOTED")
+            print " ".join(features) + " %s" % prevTags[i]
+        print
+
+    if prevSid != sid:
+        minConf = None
+        
+    prevWords = words
+    prevPos   = pos
+    prevTags  = neTags
+    prevSid   = sid
+    if minConf:
+        minConf = min(minConf,confidence)
+    else:
+        minConf = confidence
+

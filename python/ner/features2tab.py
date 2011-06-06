@@ -1,0 +1,13 @@
+#!/usr/bin/python
+
+import sys
+
+sentence = []
+for line in sys.stdin:
+    line = line.rstrip('\n')
+    if line == '':
+        print "\t".join(sentence)
+        sentence = []
+    else:
+        sentence.append(line)
+print "\t".join(sentence)

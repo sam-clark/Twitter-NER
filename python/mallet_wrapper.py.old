@@ -1,0 +1,96 @@
+#!/homes/gws/aritter/local/bin/python
+
+############################################################################## 
+# Wrapper around Mallet.  Used to create/load a model and that can be used to
+# tag sentences.
+#
+############################################################################## 
+
+import os
+import sys
+
+from pos_tag import features
+from pos_tag import symbol_tag
+
+MALLET_CLASS_DIR = '/home/ssclark/local/bin/mallet-2.0.6/class'
+MALLET_JAR_PATH = '/home/ssclark/local/bin/mallet-2.0.6/lib/mallet-deps.jar'
+
+JAVA_FP = '/usr/local/bin/java'
+
+def use_mallet(input_fp, model_fp, option, end_arg):
+    command = (JAVA_FP + ' -cp "' + MALLET_CLASS_DIR + ':' + MALLET_JAR_PATH +
+               '" cc.mallet.fst.SimpleTagger ' + option + ' --model-file ' + 
+               model_fp + ' ' + input_fp + ' ' + end_arg)
+    os.system(command)
+
+class MalletPOSTagger:
+    def __init__(self, model_fp, tokens2pos_dict, tokens_dict, temp_dir='./'):
+        self.model_fp = model_fp
+        self.mallet_fe = features.POSFeatureExtractor(tokens2pos_dict,
+                                                      tokens_dict)
+        self.temp_dir = temp_dir
+
+    def pos_tag_tweets(self, tweet_token_list):
+        # Creating test file
+        tf_path = os.path.join(self.temp_dir, 'test.txt')
+        tf = open(tf_path, 'w')
+        for token_list in tweet_token_list:
+            for token in token_list:
+                tf.write(' '.join(self.mallet_fe.get_features(token)) + '\n')
+            tf.write('\n')
+        tf.close()
+
+        # Run mallet
+        results_fp  = os.path.join(self.temp_dir, 'results.txt')
+        use_mallet(tf_path, self.model_fp, '', '> ' + results_fp)
+
+        # Read from output file
+        all_results = []
+        tweet_results = []
+        for line in open(results_fp):
+            line = line.strip()
+            if not line:
+                if tweet_results:
+                    all_results.append(tweet_results)
+                    tweet_results = []
+            else:
+                tweet_results.append(line)                
+        if tweet_results:
+            all_results.append(tweet_results)            
+
+        # Create tuples with tokens and tags
+        # Also, cleanup easy tags
+        final_results = []
+        for i in range(len(tweet_token_list)):
+            token_tags = []
+            for j in range(len(tweet_token_list[i])):
+                token = tweet_token_list[i][j]
+                pos = all_results[i][j]
+                suggest_pos = symbol_tag.tag_token(token)
+                if suggest_pos:
+                    pos = suggest_pos
+                token_tags.append((token, pos))
+            final_results.append(token_tags)
+        return final_results
+
+_model_location  = ('/home/ssclark//FeatureSelectTests/FeatureBreakdown/'
+                    'SymTags/50Kptb_40Knps_5Ktwit_model.model')
+                    
+_token2pos = ('/home/ssclark/stable_twitter_nlp/data/'
+               'pos_dictionaries/token2pos')
+_token = '/home/ssclark/stable_twitter_nlp/data/pos_dictionaries/token'
+_temp_dir = '/home/ssclark/stable_twitter_nlp/python'
+_temp_dir = './'
+
+if __name__ == '__main__':
+    if sys.argv[1] == 'train':
+        use_mallet(sys.argv[2], sys.argv[3], '--train true', '')
+    elif sys.argv[1] == 'test':
+        use_mallet(sys.argv[2], sys.argv[3], '', '')
+    elif sys.argv[1] == 'sample_pos':
+        pos_tagger = MalletPOSTagger(_model_location, _token2pos, _token,
+                                     _temp_dir)
+        print pos_tagger.pos_tag_tweets([['Sally', 'ran', 'home', '.'],
+                                         ['Mark', 'ran', 'home', '.']])
+    else:
+        print 'Options: train and test.'

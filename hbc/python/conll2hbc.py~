@@ -1,0 +1,9 @@
+#!/usr/bin/python
+
+####################################################################################
+# conll2hbc.py
+#
+# Converts manually labeled data in CoNLL format (each line contains word+tag)
+# into HBC format for LabeledLDA
+####################################################################################
+
