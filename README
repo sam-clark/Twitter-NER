@@ -1,0 +1,9 @@
+Alan Ritter
+Sam Clark
+
+System Requirements:
+-32 bit OS w/ Linux directory paths
+
+Usage (from the root of the project):
+export TWITTER_NLP=`pwd`
+cat test.1k.txt | python python/ner/extractEntities2.py
